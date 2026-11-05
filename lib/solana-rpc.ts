@@ -1,0 +1,115 @@
+/**
+ * The entire chain-reading surface of the browser, over plain fetch so
+ * @solana/web3.js and its Buffer polyfill stay out of the bundle. That surface
+ * is a blockhash before signing and a signature status after — resist growing
+ * this. Holdings come from the Indexer, not from here.
+ */
+
+export class RpcError extends Error {
+  readonly code?: number;
+  constructor(message: string, code?: number) {
+    super(message);
+    this.code = code;
+  }
+}
+
+/** One JSON-RPC request. Rejects on a dropped connection, a bad status and an error body alike. */
+async function call(endpoint: string, method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal,
+  });
+  if (!response.ok) throw new Error(`RPC returned ${response.status}`);
+  // JSON-RPC reports failures in the body with a 200, so the status check
+  // above is not enough.
+  const payload: unknown = await response.json();
+  const body = payload as { result?: unknown; error?: { code?: number; message?: string } };
+  if (body.error) throw new RpcError(body.error.message ?? "RPC error", body.error.code);
+  return body.result;
+}
+
+/**
+ * The blockhash a new transaction must reference; "confirmed" is fresh enough
+ * and matches the commitment the confirmation poll waits for.
+ */
+export async function getLatestBlockhash(endpoint: string, signal?: AbortSignal): Promise<string> {
+  const result = await call(endpoint, "getLatestBlockhash", [{ commitment: "confirmed" }], signal);
+  const blockhash = (result as { value?: { blockhash?: unknown } })?.value?.blockhash;
+  if (typeof blockhash !== "string") throw new Error("Blockhash response was malformed.");
+  return blockhash;
+}
+
+/** The transaction executed and failed — distinct from "not seen yet". */
+export class TransactionFailedError extends Error {}
+
+/** Polling gave up; the transaction may still land. Callers must say so, with an explorer link. */
+export class ConfirmationTimeoutError extends Error {}
+
+const CONFIRM_INTERVAL_MS = 2_000;
+const CONFIRM_TIMEOUT_MS = 90_000;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * One status poll, abandoned after msLeft or on dismissal, whichever comes
+ * first. Aborting a fetch errors its body too, so this also ends a response
+ * that stalls halfway. The signals are joined by hand because AbortSignal.any
+ * needs Safari 17.4 and Next supports 16.4.
+ */
+async function pollStatus(endpoint: string, signature: string, msLeft: number, signal?: AbortSignal): Promise<unknown> {
+  const poll = new AbortController();
+  const onAbort = () => poll.abort(signal?.reason);
+  const timer = setTimeout(() => poll.abort(), msLeft);
+  if (signal?.aborted) onAbort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await call(endpoint, "getSignatureStatuses", [[signature]], poll.signal);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/**
+ * Resolves once the signature reaches "confirmed" or "finalized". The status
+ * cache getSignatureStatuses reads (without searchTransactionHistory) only
+ * covers recent slots, which is exactly right for a signature broadcast
+ * seconds ago — the history flag would push a heavier query per poll for
+ * nothing. A null status just means "not seen yet", and so does a poll that
+ * errors or hangs: the wallet has already broadcast, so a rate limit or a
+ * dropped connection says nothing about the transaction. err is checked before
+ * the commitment level because a failed transaction confirms too.
+ */
+export async function confirmTransaction(endpoint: string, signature: string, signal?: AbortSignal): Promise<void> {
+  const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    let result: unknown = null;
+    try {
+      result = await pollStatus(endpoint, signature, deadline - Date.now(), signal);
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+    }
+    const status = (result as { value?: ({ err?: unknown; confirmationStatus?: unknown } | null)[] })?.value?.[0];
+    if (status && status.err != null) {
+      throw new TransactionFailedError(`Transaction failed on chain: ${JSON.stringify(status.err)}`);
+    }
+    const level = status?.confirmationStatus;
+    if (level === "confirmed" || level === "finalized") return;
+    await sleep(Math.min(CONFIRM_INTERVAL_MS, deadline - Date.now()), signal);
+  }
+  throw new ConfirmationTimeoutError("Not confirmed within 90 seconds.");
+}
