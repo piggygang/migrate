@@ -65,21 +65,41 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
+ * One status poll, abandoned after msLeft or on dismissal, whichever comes
+ * first. Aborting a fetch errors its body too, so this also ends a response
+ * that stalls halfway. The signals are joined by hand because AbortSignal.any
+ * needs Safari 17.4 and Next supports 16.4.
+ */
+async function pollStatus(endpoint: string, signature: string, msLeft: number, signal?: AbortSignal): Promise<unknown> {
+  const poll = new AbortController();
+  const onAbort = () => poll.abort(signal?.reason);
+  const timer = setTimeout(() => poll.abort(), msLeft);
+  if (signal?.aborted) onAbort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await call(endpoint, "getSignatureStatuses", [[signature]], poll.signal);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/**
  * Resolves once the signature reaches "confirmed" or "finalized". The status
  * cache getSignatureStatuses reads (without searchTransactionHistory) only
  * covers recent slots, which is exactly right for a signature broadcast
  * seconds ago — the history flag would push a heavier query per poll for
  * nothing. A null status just means "not seen yet", and so does a poll that
- * errors: the wallet has already broadcast, so a rate limit or a dropped
- * connection says nothing about the transaction. err is checked before the
- * commitment level because a failed transaction confirms too.
+ * errors or hangs: the wallet has already broadcast, so a rate limit or a
+ * dropped connection says nothing about the transaction. err is checked before
+ * the commitment level because a failed transaction confirms too.
  */
 export async function confirmTransaction(endpoint: string, signature: string, signal?: AbortSignal): Promise<void> {
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < deadline) {
     let result: unknown = null;
     try {
-      result = await call(endpoint, "getSignatureStatuses", [[signature]], signal);
+      result = await pollStatus(endpoint, signature, deadline - Date.now(), signal);
     } catch (cause) {
       if (signal?.aborted) throw cause;
     }
@@ -89,7 +109,7 @@ export async function confirmTransaction(endpoint: string, signature: string, si
     }
     const level = status?.confirmationStatus;
     if (level === "confirmed" || level === "finalized") return;
-    await sleep(CONFIRM_INTERVAL_MS, signal);
+    await sleep(Math.min(CONFIRM_INTERVAL_MS, deadline - Date.now()), signal);
   }
   throw new ConfirmationTimeoutError("Not confirmed within 90 seconds.");
 }
