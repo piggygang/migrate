@@ -13,6 +13,7 @@ export class RpcError extends Error {
   }
 }
 
+/** One JSON-RPC request. Rejects on a dropped connection, a bad status and an error body alike. */
 async function call(endpoint: string, method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -68,13 +69,20 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  * cache getSignatureStatuses reads (without searchTransactionHistory) only
  * covers recent slots, which is exactly right for a signature broadcast
  * seconds ago — the history flag would push a heavier query per poll for
- * nothing. A null status just means "not seen yet"; err is checked before the
+ * nothing. A null status just means "not seen yet", and so does a poll that
+ * errors: the wallet has already broadcast, so a rate limit or a dropped
+ * connection says nothing about the transaction. err is checked before the
  * commitment level because a failed transaction confirms too.
  */
 export async function confirmTransaction(endpoint: string, signature: string, signal?: AbortSignal): Promise<void> {
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const result = await call(endpoint, "getSignatureStatuses", [[signature]], signal);
+    let result: unknown = null;
+    try {
+      result = await call(endpoint, "getSignatureStatuses", [[signature]], signal);
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+    }
     const status = (result as { value?: ({ err?: unknown; confirmationStatus?: unknown } | null)[] })?.value?.[0];
     if (status && status.err != null) {
       throw new TransactionFailedError(`Transaction failed on chain: ${JSON.stringify(status.err)}`);

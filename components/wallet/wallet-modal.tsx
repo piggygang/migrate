@@ -40,6 +40,10 @@ const DEEPLINKS = [
 const deeplinkUrl = (base: string) =>
   `${base}${encodeURIComponent(window.location.href)}?ref=${encodeURIComponent(window.location.origin)}`;
 
+/**
+ * Mounted once by <WalletProvider>, which opens it through `modalOpen`. Shows
+ * the connected account or a way to connect, above the RPC override form.
+ */
 export function WalletModal() {
   const { wallets, address, override, error, modalOpen, closeModal, connect, disconnect, saveEndpoint } = useWallet();
   const dialog = useRef<HTMLDialogElement>(null);

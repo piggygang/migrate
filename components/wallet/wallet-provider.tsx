@@ -61,12 +61,17 @@ type WalletState = {
 
 const WalletContext = createContext<WalletState | null>(null);
 
+/**
+ * The shared connection. Throws outside <WalletProvider>: that is a wiring
+ * mistake, not a state a page should render.
+ */
 export function useWallet(): WalletState {
   const state = useContext(WalletContext);
   if (!state) throw new Error("useWallet must be used inside <WalletProvider>");
   return state;
 }
 
+/** Owns the connection and the RPC endpoint, and mounts the one <WalletModal> they share. */
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<SolanaWallet[]>([]);
   const [wallet, setWallet] = useState<SolanaWallet | null>(null);

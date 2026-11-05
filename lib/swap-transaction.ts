@@ -5,16 +5,23 @@ import {
   createNoopSigner,
   publicKey,
   transactionBuilder,
+  type PublicKey,
   type Signer,
   type TransactionBuilder,
   type Umi,
 } from "@metaplex-foundation/umi";
-import type { Pair } from "@/lib/pairs";
+import type { Pair, Role } from "@/lib/pairs";
 
 export type SwapInput = {
   /** The holder's address: owns both burned mints, pays the fee, receives the new asset. */
   owner: string;
   pair: Pair;
+  /**
+   * Per role, the metadata account of the collection that mint is verified
+   * into; leave the role out for a mint that is not. No PSG is verified yet and
+   * PIG-223 verifies them in batches, so one pair can hold both states.
+   */
+  collectionMetadata?: Partial<Record<Role, PublicKey>>;
   /** The Piggy Gang Core collection, fetched: its plugins decide the extra accounts `create` needs. */
   collection: NonNullable<CreateArgs["collection"]>;
   /** A fresh keypair. A Core asset is its own account, so its address signs once, at birth. */
@@ -37,29 +44,28 @@ export type SwapInput = {
  *
  * The holder is a noop signer because their signature comes later, from the
  * wallet. buildAndSign() adds `asset` and `authority` and leaves the holder's
- * slot empty for it. A mint verified into a sized collection also needs
- * burnV1's `collectionMetadata`; that arrives with the route, which can tell
- * from the chain which state each mint is in.
+ * slot empty for it.
  */
 export function buildSwapTransaction(
   umi: Umi,
-  { owner, pair, collection, asset, authority, name, uri }: SwapInput,
+  { owner, pair, collectionMetadata, collection, asset, authority, name, uri }: SwapInput,
 ): TransactionBuilder {
   const holderKey = publicKey(owner);
   const holder = createNoopSigner(holderKey);
   // `authority` is explicit on purpose: left out, burnV1 falls back to
   // umi.identity, which on the server is the app's key and owns neither mint.
-  const burn = (mint: string) =>
+  const burn = (role: Role) =>
     burnV1(umi, {
       authority: holder,
-      mint: publicKey(mint),
+      mint: publicKey(pair[role]),
       tokenOwner: holderKey,
       tokenStandard: TokenStandard.NonFungible,
+      collectionMetadata: collectionMetadata?.[role],
     });
 
   return transactionBuilder()
-    .add(burn(pair.burn))
-    .add(burn(pair.upgrade))
+    .add(burn("burn"))
+    .add(burn("upgrade"))
     .add(create(umi, { asset, collection, name, uri, authority, payer: holder, owner: holderKey }))
     .setFeePayer(holder);
 }

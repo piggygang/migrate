@@ -33,4 +33,4 @@ Vercel: zero-config import. Previews stay on devnet; production sets `NEXT_PUBLI
 
 ## Wallet smoke test
 
-`/dev/wallet` (unlinked, noindex) connects a wallet and signs one Memo transaction on the configured cluster — the scaffold's acceptance check. Switch the wallet app itself to devnet first, and hold a little devnet SOL for the fee.
+`/dev/wallet` (unlinked, noindex) connects a wallet and signs one Memo transaction on the configured cluster — the scaffold's acceptance check. Switch the wallet app itself to that cluster first, and hold a little SOL there for the fee. On `mainnet-beta` that fee is real SOL.

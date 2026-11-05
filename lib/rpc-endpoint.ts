@@ -22,6 +22,7 @@ if (CLUSTER === "mainnet-beta" && !configured) {
 
 export const DEFAULT_ENDPOINT = configured || "https://api.devnet.solana.com";
 
+/** Whether a holder's override is an http(s) URL. Whether it answers shows at blockhash time. */
 export function isValidEndpoint(value: string): boolean {
   try {
     const url = new URL(value);
@@ -31,6 +32,7 @@ export function isValidEndpoint(value: string): boolean {
   }
 }
 
+/** The override saved for this cluster, or "" when there is none. */
 export function readOverride(): string {
   // localStorage throws outright when the browser blocks storage, rather than
   // returning null, so every access is guarded.
@@ -41,6 +43,7 @@ export function readOverride(): string {
   }
 }
 
+/** Saves the override for this cluster; "" clears it. */
 export function writeOverride(value: string): void {
   try {
     if (value) window.localStorage.setItem(KEY, value);

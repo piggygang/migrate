@@ -21,12 +21,16 @@ export function PiggyMark({ className }: { className?: string }) {
   );
 }
 
+/**
+ * The header's home link. The label repeats the words on screen, not SITE.name
+ * alone, because voice control finds a link by the text the holder can read.
+ */
 export function Wordmark({ className }: { className?: string }) {
   return (
     <Link
       href="/"
       className={`group inline-flex items-center gap-2.5 ${className ?? ""}`}
-      aria-label={`${SITE.name} — home`}
+      aria-label={`Piggy ${SITE.name} — home`}
     >
       <PiggyMark className="h-8 w-8 transition-transform group-hover:-rotate-6" />
       <span className="text-lg font-semibold tracking-tight">

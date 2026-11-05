@@ -6,6 +6,7 @@
  */
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
+/** Encodes bytes as base58, one leading "1" per leading zero byte. */
 export function base58Encode(bytes: Uint8Array): string {
   let n = 0n;
   for (const byte of bytes) n = (n << 8n) | BigInt(byte);
@@ -20,6 +21,7 @@ export function base58Encode(bytes: Uint8Array): string {
   return out;
 }
 
+/** Decodes base58 to bytes. Throws on any character outside the alphabet. */
 export function base58Decode(text: string): Uint8Array {
   let n = 0n;
   for (const char of text) {

@@ -11,6 +11,7 @@ export type Pair = Readonly<Record<Role, string>>;
 
 export const NO_SELECTION: Selection = { upgrade: [], burn: [] };
 
+/** The role a mint holds in this selection, or null if it has not been picked. */
 export function roleOf(selection: Selection, mint: string): Role | null {
   if (selection.upgrade.includes(mint)) return "upgrade";
   if (selection.burn.includes(mint)) return "burn";

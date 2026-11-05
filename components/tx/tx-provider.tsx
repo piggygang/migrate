@@ -34,6 +34,10 @@ type TxState = {
 
 const TxContext = createContext<TxState | null>(null);
 
+/**
+ * The toast stack's `track`. Throws outside <TxProvider>: that is a wiring
+ * mistake, not a state a page should render.
+ */
 export function useTx(): TxState {
   const state = useContext(TxContext);
   if (!state) throw new Error("useTx must be used inside <TxProvider>");
