@@ -13,6 +13,8 @@ const INPUT =
 const ACTION =
   "shrink-0 rounded-full border border-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-60";
 
+const BLOCKHASH_TIMEOUT_MS = 15_000;
+
 const shorten = (signature: string) => `${signature.slice(0, 8)}…${signature.slice(-8)}`;
 
 /**
@@ -34,8 +36,16 @@ export function DevWallet() {
     if (!wallet || !account || busy) return;
     setBusy(true);
     setError(null);
+    // Firing after the blockhash arrives is harmless: the request is already
+    // over, so a slow approval in the wallet is never cut off.
+    const request = new AbortController();
+    const timer = setTimeout(() => request.abort(new Error("The RPC did not answer in time.")), BLOCKHASH_TIMEOUT_MS);
     try {
-      const blockhash = await getLatestBlockhash(endpoint);
+      // Rethrown by hand because WebKit drops an abort's reason from the
+      // rejection, and so does Firefox for a stalled body.
+      const blockhash = await getLatestBlockhash(endpoint, request.signal).catch((cause: unknown) => {
+        throw request.signal.aborted ? request.signal.reason : cause;
+      });
       const transaction = buildMemoTransaction(account.publicKey, blockhash, memo);
       const signature = await signAndSendTransaction(wallet, account, CHAIN, transaction);
       setSent(signature);
@@ -45,6 +55,7 @@ export function DevWallet() {
       // Wallets word a rejection a dozen ways; one calm sentence covers them all.
       setError(/reject|declin|denied|cancel/i.test(message) ? "Signing was declined." : message);
     } finally {
+      clearTimeout(timer);
       setBusy(false);
     }
   }

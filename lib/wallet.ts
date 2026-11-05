@@ -42,13 +42,14 @@ export type SolanaWallet = {
 type ConnectFeature = { connect: () => Promise<{ accounts: readonly WalletAccount[] }> };
 type DisconnectFeature = { disconnect: () => Promise<void> };
 type EventsFeature = { on: (event: "change", listener: () => void) => () => void };
-// The spec input also allows `options` (preflightCommitment, skipPreflight,
-// maxRetries, minContextSlot); we send none and let the wallet default.
+// The spec's options also take commitment (which makes the wallet wait for
+// confirmation), skipPreflight, maxRetries and minContextSlot; we send none.
 type SignAndSendFeature = {
   signAndSendTransaction: (input: {
     account: WalletAccount;
     transaction: Uint8Array;
     chain: SolanaChain;
+    options?: { preflightCommitment?: "processed" | "confirmed" | "finalized" };
   }) => Promise<readonly { signature: Uint8Array }[]>;
 };
 
@@ -63,6 +64,14 @@ type SignAndSendFeature = {
  */
 function isSolanaWallet(wallet: SolanaWallet): boolean {
   return wallet.chains.includes(CHAIN) && CONNECT in wallet.features && SIGN_AND_SEND in wallet.features;
+}
+
+/**
+ * An account need not cover every chain its wallet lists, so the filter above
+ * does not settle which account can sign here.
+ */
+function accountsOnChain(accounts: readonly WalletAccount[]): readonly WalletAccount[] {
+  return accounts.filter((account) => account.chains.includes(CHAIN));
 }
 
 /** Registered Solana wallets right now. Empty during SSR and before hydration. */
@@ -86,12 +95,12 @@ export function onWalletsChange(listener: (wallets: SolanaWallet[]) => void): ()
   return () => off.forEach((remove) => remove());
 }
 
-/** Prompts the wallet and returns the accounts it authorised, if any. */
+/** Prompts the wallet and returns the accounts it authorised on this build's chain, if any. */
 export async function connect(wallet: SolanaWallet): Promise<readonly WalletAccount[]> {
   const feature = wallet.features[CONNECT] as ConnectFeature | undefined;
   if (!feature) throw new Error(`${wallet.name} cannot connect`);
   const { accounts } = await feature.connect();
-  return accounts;
+  return accountsOnChain(accounts);
 }
 
 /** Not every wallet implements disconnect; where it does not, forgetting locally is enough. */
@@ -101,9 +110,10 @@ export async function disconnect(wallet: SolanaWallet): Promise<void> {
 }
 
 /**
- * Fires when the holder switches or locks accounts inside the wallet. Full
- * account objects, not addresses: after a switch, the *new* account must be
- * the one presented back to signAndSendTransaction.
+ * Fires when the holder switches or locks accounts inside the wallet, with the
+ * accounts on this build's chain. Full account objects, not addresses: after a
+ * switch, the *new* account must be the one presented back to
+ * signAndSendTransaction.
  */
 export function onAccountsChange(
   wallet: SolanaWallet,
@@ -111,7 +121,7 @@ export function onAccountsChange(
 ): () => void {
   const feature = wallet.features[EVENTS] as EventsFeature | undefined;
   if (!feature) return () => {};
-  return feature.on("change", () => listener(wallet.accounts));
+  return feature.on("change", () => listener(accountsOnChain(wallet.accounts)));
 }
 
 /**
@@ -128,7 +138,15 @@ export async function signAndSendTransaction(
 ): Promise<string> {
   const feature = wallet.features[SIGN_AND_SEND] as SignAndSendFeature | undefined;
   if (!feature) throw new Error(`${wallet.name} cannot sign transactions`);
-  const [result] = await feature.signAndSendTransaction({ account, transaction, chain });
+  // The commitment getLatestBlockhash reads at. Left to the RPC's "finalized"
+  // default, preflight can run on a bank that has not reached that blockhash and
+  // fail with "Blockhash not found".
+  const [result] = await feature.signAndSendTransaction({
+    account,
+    transaction,
+    chain,
+    options: { preflightCommitment: "confirmed" },
+  });
   if (!result) throw new Error(`${wallet.name} returned no signature`);
   return base58Encode(result.signature);
 }
