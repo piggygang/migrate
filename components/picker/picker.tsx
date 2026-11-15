@@ -41,18 +41,24 @@ export function Picker() {
  */
 export function WalletPicker({ address }: { address: string }) {
   const { data, error, reading, refresh } = usePiggies(address);
-  const [picked, setPicked] = useState<Selection>(NO_SELECTION);
+  const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  // The read the picks were last checked against.
+  const [checked, setChecked] = useState<WalletPiggies | null>(null);
 
   const byMint = useMemo(() => new Map((data?.piggies ?? []).map((piggy) => [piggy.mint, piggy])), [data]);
-  // Picks a fresh read no longer allows (sold, swapped, re-ruled) fall out
-  // here, during render, rather than in an effect.
-  const selection = useMemo(
-    () => retain(picked, (role, mint) => byMint.get(mint)?.verdict[role].ok === true),
-    [picked, byMint],
-  );
 
-  const pick = (role: Role, mint: string) => setPicked(toggle(selection, role, mint));
-  const remove = (index: number) => setPicked(removeSlot(selection, index));
+  // When a new read lands, picks it no longer allows (sold, swapped,
+  // re-ruled) leave the state, not just the screen, so a later read that
+  // brings the piggy back cannot quietly re-pick it. During render rather
+  // than in an effect: React re-renders before committing, so a stale pick
+  // never shows. A failed refresh keeps the same `data`, so it drops nothing.
+  if (data !== checked) {
+    setChecked(data);
+    setSelection(retain(selection, (role, mint) => byMint.get(mint)?.verdict[role].ok === true));
+  }
+
+  const pick = (role: Role, mint: string) => setSelection(toggle(selection, role, mint));
+  const remove = (index: number) => setSelection(removeSlot(selection, index));
 
   if (!data) {
     return error ? (

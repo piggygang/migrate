@@ -164,7 +164,10 @@ export async function readWallet(address: string, collection: string, signal: Ab
     if (pages === 0) holdings = parseHoldings(body.collections);
 
     const page = (body.nfts ?? {}) as { data?: unknown; nextCursor?: unknown; hasMore?: unknown };
-    for (const row of Array.isArray(page.data) ? page.data : []) {
+    // A 200 without its rows is a broken reply, not an empty wallet: reading it
+    // as "no piggies" would replace the list a holder is looking at.
+    if (!Array.isArray(page.data)) throw new IndexerError("The index sent a malformed reply.");
+    for (const row of page.data) {
       const piggy = parseRow(row, address, collection);
       // A live update can move a row across a page boundary.
       if (!piggy || seen.has(piggy.mint)) continue;
