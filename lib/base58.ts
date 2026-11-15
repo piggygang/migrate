@@ -37,3 +37,14 @@ export function base58Decode(text: string): Uint8Array {
   }
   return new Uint8Array(bytes);
 }
+
+const ADDRESS_SHAPE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/**
+ * Whether text is a Solana address: base58 for exactly 32 bytes. The length
+ * check alone is not enough, as 44 characters can spell 33 bytes. The shape
+ * test runs first, so a hostile string never reaches the BigInt arithmetic.
+ */
+export function isAddress(text: string): boolean {
+  return ADDRESS_SHAPE.test(text) && base58Decode(text).length === 32;
+}

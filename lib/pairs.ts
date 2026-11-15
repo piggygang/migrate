@@ -41,3 +41,38 @@ export function toPairs({ upgrade, burn }: Selection): Pair[] | null {
   if (upgrade.length === 0 || upgrade.length !== burn.length) return null;
   return upgrade.map((mint, index) => ({ upgrade: mint, burn: burn[index] }));
 }
+
+/** A pair position as the builder shows it: either side may still be empty. */
+export type Slot = Readonly<Record<Role, string | null>>;
+
+/**
+ * Every pair position the selection describes, complete or not, so the pair
+ * builder can show a pick still waiting for its partner. Which burned piggy
+ * meets which upgrade changes nothing about the outcome, which is why plain
+ * pick order is enough. toPairs() is what a swap takes.
+ */
+export function slots({ upgrade, burn }: Selection): Slot[] {
+  return Array.from({ length: Math.max(upgrade.length, burn.length) }, (_, index) => ({
+    upgrade: upgrade[index] ?? null,
+    burn: burn[index] ?? null,
+  }));
+}
+
+/** Drops both picks at one position. Later positions move up. */
+export function removeSlot(selection: Selection, index: number): Selection {
+  return {
+    upgrade: selection.upgrade.filter((_, at) => at !== index),
+    burn: selection.burn.filter((_, at) => at !== index),
+  };
+}
+
+/**
+ * Keeps only the picks a fresh read still allows, so a piggy sold or swapped
+ * since it was picked drops out instead of lingering in a pair.
+ */
+export function retain(selection: Selection, allowed: (role: Role, mint: string) => boolean): Selection {
+  return {
+    upgrade: selection.upgrade.filter((mint) => allowed("upgrade", mint)),
+    burn: selection.burn.filter((mint) => allowed("burn", mint)),
+  };
+}

@@ -30,11 +30,11 @@ import { WalletModal } from "./wallet-modal";
  * Everything wallet-shaped, held once for the whole app so the navbar, the
  * swap page and the dev harness all read the same connection.
  *
- * Unlike dressme's provider this one holds no holdings reads — nothing consumes
- * them yet. When the picker needs a wallet's piggies, dressme's wallet-provider
- * is the reference implementation of the keyed-read idiom to reintroduce (store
- * the result against the key of the inputs that produced it; derive loading and
- * error rather than resetting them in effects).
+ * Unlike dressme's provider this one holds no holdings reads: the picker is
+ * their only consumer, so the read lives in components/picker/use-piggies.ts,
+ * dressme's keyed-read idiom (store each result against the inputs that
+ * produced it; derive loading and error rather than resetting them in
+ * effects), restarted per address by remounting the picker.
  */
 type WalletState = {
   wallets: SolanaWallet[];
