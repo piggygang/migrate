@@ -76,4 +76,7 @@ The logic worth keeping from `piggy-upgrades`, rewritten. The picker uses the mi
 
 ## Keys
 
-Nothing secret came from `piggy-upgrades` and nothing may: not its committed keypairs, not its hard-coded Helius key (PIG-181). The app's signing key is generated fresh per cluster (PIG-226), and lives only in a password manager and a Vercel sensitive variable, never in this repo or in a `NEXT_PUBLIC_` variable.
+Nothing secret came from `piggy-upgrades` and nothing may: not its committed keypairs, not its hard-coded Helius key (PIG-181). The app's signing key is generated fresh per cluster (PIG-226), and lives only in a password manager and a Vercel sensitive variable, never in this repo or in a `NEXT_PUBLIC_` variable. `.gitignore` backstops the usual keypair file names and the old repo's.
+
+- `piggy-upgrades` committed three keypairs. They are devnet test keys with no mainnet history, and they are not the team's: `3BxEGEe6Lcdpk7Pkb6JvV6BEyavoraS163jFpTpjmrgp`, `EKeBXmdFToES3z2yVmZVkMwTQVsws4yajnCq1RZQB2rc` and `3fhPZKMhXibS1hTGvkZHCS6V58LM4LeAcQ4E7g6cGXY5`. Two still hold about 1 devnet SOL each, which makes them tempting for a rehearsal: never sign with, fund or authorize any of them, on any cluster. Whatever loads the app's signing key (PIG-194) must refuse these three, and the collection's root authority too, because the app signs as its update delegate only.
+- RPC keys, Helius or any other, are the team's own and come only from the environment. The browser's key is world-readable, so it must be domain-restricted; server-side reads (PIG-194) therefore get a key of their own, in a variable without the `NEXT_PUBLIC_` prefix.
