@@ -1,5 +1,5 @@
 allowBuilds:
-  # Unlike dressme, sharp builds here: the picker's art previews will be remote,
+  # Unlike dressme, sharp builds here: the picker's art previews are remote,
   # which is exactly what next/image optimisation is for.
   sharp: true
   unrs-resolver: false
