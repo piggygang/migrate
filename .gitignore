@@ -24,6 +24,14 @@
 .DS_Store
 *.pem
 
+# keys never enter the repo (CLAUDE.md, "Keys"): the usual keypair names, and
+# the names piggy-upgrades committed its keypairs under
+*keypair*.json
+id.json
+admin.json
+admin copy.json
+airdropAccount.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
